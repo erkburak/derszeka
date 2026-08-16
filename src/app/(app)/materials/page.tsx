@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import {
   AlertCircle,
   BookOpen,
@@ -94,7 +94,7 @@ export default async function MaterialsPage() {
               return (
                 <li key={doc.id}>
                   <Link href={`/materials/${doc.id}`} className="block">
-                    <Card className="h-full transition-shadow hover:shadow-[var(--shadow-lift)]">
+                    <Card className="card-interactive h-full">
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
                           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">

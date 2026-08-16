@@ -21,7 +21,17 @@ const PROTECTED_PREFIXES = [
 const AUTH_PAGES = ["/giris", "/kayit", "/sifremi-unuttum"];
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
+
+  // Supabase, izin listesinde olmayan bir redirect verildiğinde doğrulama
+  // kodunu Site URL'e (kök adrese) bırakır. Kodu kaybetmemek için
+  // callback'e yönlendiriyoruz.
+  if (pathname === "/" && searchParams.has("code")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   const { response, user } = await updateSession(request);
 
   const isProtected = PROTECTED_PREFIXES.some(

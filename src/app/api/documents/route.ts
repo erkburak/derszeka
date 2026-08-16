@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api";
 import { requireProfile } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { kickWorker } from "@/lib/jobs/kick";
+
+const PENDING_STATUSES = [
+  "queued",
+  "extracting",
+  "embedding",
+  "analyzing",
+  "generating",
+];
 
 export const runtime = "nodejs";
 
@@ -25,6 +34,12 @@ export const GET = withApi(async (request: Request) => {
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
+
+  // İşlenmeyi bekleyen materyal varsa kuyruğu dürt. Yükleme anındaki
+  // tetikleme kaçırılmış olsa bile arayüz yokladıkça iş devam eder.
+  if ((data ?? []).some((doc) => PENDING_STATUSES.includes(doc.status as string))) {
+    kickWorker(1);
+  }
 
   return NextResponse.json({ documents: data ?? [] });
 });

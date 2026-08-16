@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { AppError, withApi } from "@/lib/api";
 import { requireProfile } from "@/lib/auth";
 import { createAdminSupabase, createServerSupabase } from "@/lib/supabase/server";
-import { enqueueJob, triggerWorker } from "@/lib/jobs/queue";
+import { enqueueJob } from "@/lib/jobs/queue";
+import { kickWorker } from "@/lib/jobs/kick";
 
 export const runtime = "nodejs";
 
@@ -59,7 +60,7 @@ export const POST = withApi(async (_request: Request, ctx: Params) => {
     userId: profile.id,
     priority: 50,
   });
-  triggerWorker();
+  kickWorker();
 
   return NextResponse.json({ ok: true });
 });

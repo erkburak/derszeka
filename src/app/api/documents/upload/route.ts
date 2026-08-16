@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { AppError, withApi } from "@/lib/api";
 import { requireProfile } from "@/lib/auth";
 import {
@@ -11,7 +11,8 @@ import { clientIp, enforceRateLimit } from "@/lib/security/rate-limit";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { validateUpload } from "@/lib/documents/validate";
 import { paginateText } from "@/lib/documents/extract";
-import { enqueueJob, triggerWorker } from "@/lib/jobs/queue";
+import { enqueueJob } from "@/lib/jobs/queue";
+import { kickWorker } from "@/lib/jobs/kick";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -174,7 +175,7 @@ export const POST = withApi(async (request: Request) => {
   }
 
   await incrementUsage(profile.id, "uploads", "month", created.length);
-  triggerWorker();
+  kickWorker();
 
   return NextResponse.json({ documents: created });
 });

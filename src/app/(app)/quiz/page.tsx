@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { ListChecks, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent, EmptyState } from "@/components/ui";
@@ -89,7 +89,7 @@ export default async function QuizListPage({
             return (
               <li key={quiz.id}>
                 <Link href={`/quiz/${quiz.id}`}>
-                  <Card className="h-full transition-shadow hover:shadow-[var(--shadow-lift)]">
+                  <Card className="card-interactive h-full">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">

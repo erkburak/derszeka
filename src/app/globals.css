@@ -80,6 +80,50 @@ body {
   border-radius: 0.375rem;
 }
 
+/* Tailwind v4 Preflight butonlara `cursor: default` veriyor.
+   Tıklanabilir her şeye işaretçiyi geri kazandırıyoruz. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  select:not(:disabled),
+  a[href],
+  label:has(input[type="checkbox"]:not(:disabled)),
+  label:has(input[type="radio"]:not(:disabled)),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="file"]:not(:disabled)::file-selector-button,
+  input[type="date"]:not(:disabled),
+  input[type="date"]:not(:disabled)::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  textarea:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Metin girişleri işaretçi değil, imleç göstermeli. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="date"]):not(:disabled),
+  textarea:not(:disabled) {
+    cursor: text;
+  }
+
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  a {
+    transition: color 0.15s ease-out;
+  }
+}
+
 /* İnce kaydırma çubuğu — uzun listeler ve sohbet için */
 @supports (scrollbar-width: thin) {
   .scroll-slim {
@@ -93,6 +137,25 @@ body {
   border: 1px solid var(--color-line);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-soft);
+}
+
+/* Tıklanabilir kart — hafif kalkma efekti */
+@utility card-interactive {
+  cursor: pointer;
+  transition:
+    box-shadow 0.18s ease-out,
+    border-color 0.18s ease-out,
+    transform 0.18s ease-out;
+
+  &:hover {
+    box-shadow: var(--shadow-lift);
+    border-color: var(--color-brand-200);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
 }
 
 @utility gradient-brand {

@@ -8,6 +8,7 @@ import { extractDocument } from "@/lib/documents/extract";
 import { chunkPages } from "@/lib/documents/chunk";
 import { embedAndStoreChunks } from "@/lib/rag/retrieval";
 import { generateFlashcards, generateQuiz, generateStudySet } from "@/lib/study/generate";
+import { AIProviderError } from "@/lib/ai/errors";
 import { sendTemplatedEmail, type EmailTemplateKey } from "@/lib/email/send";
 import { queueDocumentReadyEmail } from "@/lib/email/triggers";
 import { awardBadges } from "@/lib/study/progress";
@@ -325,9 +326,13 @@ async function markJobResult(
   job: ProcessingJob,
   outcome: "completed" | "failed",
   error?: string,
+  options: { retryable?: boolean; userMessage?: string } = {},
 ) {
   const supabase = createAdminSupabase();
-  const canRetry = outcome === "failed" && job.attempts < job.max_attempts;
+  const canRetry =
+    outcome === "failed" &&
+    options.retryable !== false &&
+    job.attempts < job.max_attempts;
 
   await supabase
     .from("processing_jobs")
@@ -349,6 +354,7 @@ async function markJobResult(
         status: "failed",
         status_message: STAGE_MESSAGES.failed,
         error_message:
+          options.userMessage ??
           "Materyal işlenirken bir sorun oluştu. Dosyayı tekrar yüklemeyi deneyebilirsin.",
         progress: 0,
       })
@@ -359,7 +365,9 @@ async function markJobResult(
         user_id: job.user_id,
         type: "error",
         title: "Materyal işlenemedi",
-        body: "Dosyanı tekrar yüklemeyi veya farklı bir format denemeyi öneririz.",
+        body:
+          options.userMessage ??
+          "Dosyanı tekrar yüklemeyi veya farklı bir format denemeyi öneririz.",
         link: `/materials/${job.document_id}`,
       });
     }
@@ -393,8 +401,26 @@ export async function runNextJob(): Promise<{ id: string; type: string } | null>
     await markJobResult(job, "completed");
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught);
-    console.error("[worker]", job.id, job.job_type, message);
-    await markJobResult(job, "failed", message.slice(0, 1000));
+
+    // Yapılandırma hatalarını (eksik API anahtarı gibi) tekrar denemek
+    // anlamsız; kullanıcıyı bekletmeden net mesajla bitir.
+    const aiError = caught instanceof AIProviderError ? caught : null;
+    const retryable = aiError ? aiError.retryable : true;
+    const userMessage =
+      aiError?.code === "auth"
+        ? "Yapay zekâ servisi henüz yapılandırılmamış. Yönetici panelinden API anahtarı girilmesi gerekiyor."
+        : aiError?.message;
+
+    console.error(
+      "[worker]",
+      job.id,
+      job.job_type,
+      aiError?.technicalMessage ?? message,
+    );
+    await markJobResult(job, "failed", message.slice(0, 1000), {
+      retryable,
+      userMessage,
+    });
   }
 
   return { id: job.id, type: job.job_type };
