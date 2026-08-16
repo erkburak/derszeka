@@ -308,7 +308,10 @@ export async function runChat(options: RunChatOptions): Promise<ChatResponse> {
       messages: options.messages,
       maxOutputTokens,
       jsonSchema: options.jsonSchema,
-      effort: settings.ai_effort as "low" | "medium" | "high",
+      // Desteklemeyen modellere effort gönderilmez; API aksi hâlde 400 döner.
+      effort: model.supports_effort
+        ? (settings.ai_effort as "low" | "medium" | "high")
+        : undefined,
     });
 
     await recordRequest({

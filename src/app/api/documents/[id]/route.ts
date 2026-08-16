@@ -49,9 +49,33 @@ export const POST = withApi(async (_request: Request, ctx: Params) => {
     return NextResponse.json({ ok: true, alreadyCompleted: true });
   }
 
-  await createAdminSupabase()
+  // Tamamlanmış aşamaları tekrarlamayalım: analiz 1-2 dakika sürüyor ve
+  // para maliyeti var. Nereye kadar gelindiyse oradan devam edilir.
+  const admin = createAdminSupabase();
+  const [{ data: studySet }, { count: chunkCount }, { count: pageCount }] =
+    await Promise.all([
+      admin.from("study_sets").select("id").eq("document_id", id).maybeSingle(),
+      admin
+        .from("document_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("document_id", id),
+      admin
+        .from("document_pages")
+        .select("id", { count: "exact", head: true })
+        .eq("document_id", id),
+    ]);
+
+  const resume = studySet
+    ? { status: "generating" as const, progress: 75 }
+    : (chunkCount ?? 0) > 0
+      ? { status: "analyzing" as const, progress: 55 }
+      : (pageCount ?? 0) > 0
+        ? { status: "embedding" as const, progress: 35 }
+        : { status: "queued" as const, progress: 0 };
+
+  await admin
     .from("documents")
-    .update({ status: "queued", progress: 0, error_message: null })
+    .update({ ...resume, error_message: null })
     .eq("id", id);
 
   await enqueueJob({

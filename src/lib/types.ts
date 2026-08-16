@@ -242,6 +242,8 @@ export interface AIModelRow {
   max_output_tokens: number;
   supports_vision: boolean;
   supports_pdf: boolean;
+  /** `output_config.effort` parametresini kabul ediyor mu. */
+  supports_effort: boolean;
   priority: number;
 }
 

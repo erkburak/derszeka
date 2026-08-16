@@ -9,6 +9,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "worker": "node scripts/worker.mjs",
+    "probe:models": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/probe-models.mts",
+    "debug:analysis": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/debug-analysis.mts",
     "verify:schemas": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-schemas.mts",
     "db:login": "npx --yes supabase@latest login",
     "db:link": "npx --yes supabase@latest link --project-ref isonhubfzuivvpmkwjxv",

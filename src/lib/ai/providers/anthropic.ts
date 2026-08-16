@@ -69,34 +69,57 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async chat(modelKey: string, request: ChatRequest): Promise<ChatResponse> {
-    const outputConfig: Record<string, unknown> = {
-      effort: request.effort ?? "medium",
-    };
-    if (request.jsonSchema) {
-      outputConfig.format = {
-        type: "json_schema",
-        schema: request.jsonSchema.schema,
-      };
-    }
+    const buildParams = (withEffort: boolean) => {
+      const outputConfig: Record<string, unknown> = {};
+      // Bazı modeller (ör. Haiku 4.5) effort parametresini reddediyor.
+      if (withEffort && request.effort) outputConfig.effort = request.effort;
+      if (request.jsonSchema) {
+        outputConfig.format = {
+          type: "json_schema",
+          schema: request.jsonSchema.schema,
+        };
+      }
 
-    const params = {
-      model: modelKey,
-      max_tokens: request.maxOutputTokens,
-      system: request.system,
-      messages: toMessages(request.messages),
-      // Üretim işleri araç kullanmıyor; düşünmeyi kapatmak maliyeti
-      // öngörülebilir kılıyor. Derinlik `effort` ile ayarlanır.
-      thinking: { type: "disabled" as const },
-      output_config: outputConfig,
-    } as unknown as Anthropic.MessageCreateParamsNonStreaming;
+      return {
+        model: modelKey,
+        max_tokens: request.maxOutputTokens,
+        system: request.system,
+        messages: toMessages(request.messages),
+        // Üretim işleri araç kullanmıyor; düşünmeyi kapatmak maliyeti
+        // öngörülebilir kılıyor. Derinlik `effort` ile ayarlanır.
+        thinking: { type: "disabled" as const },
+        ...(Object.keys(outputConfig).length > 0
+          ? { output_config: outputConfig }
+          : {}),
+      } as unknown as Anthropic.MessageCreateParamsNonStreaming;
+    };
+
+    const send = async (withEffort: boolean) => {
+      const params = buildParams(withEffort);
+      return request.maxOutputTokens > STREAM_THRESHOLD
+        ? await this.client.messages
+            .stream(params as Anthropic.MessageCreateParams)
+            .finalMessage()
+        : await this.client.messages.create(params);
+    };
 
     try {
-      const message =
-        request.maxOutputTokens > STREAM_THRESHOLD
-          ? await this.client.messages
-              .stream(params as Anthropic.MessageCreateParams)
-              .finalMessage()
-          : await this.client.messages.create(params);
+      let message: Anthropic.Message;
+      try {
+        message = await send(Boolean(request.effort));
+      } catch (error) {
+        // Katalogdaki yetenek bayrağı yanlışsa tek seferlik kurtarma:
+        // effort'suz tekrar dene ki materyal işlenmeden kalmasın.
+        const unsupportedEffort =
+          error instanceof Anthropic.APIError &&
+          error.status === 400 &&
+          /effort/i.test(error.message);
+        if (!unsupportedEffort || !request.effort) throw error;
+        console.warn(
+          `[anthropic] ${modelKey} effort parametresini desteklemiyor; effort olmadan yeniden denendi.`,
+        );
+        message = await send(false);
+      }
 
       if (message.stop_reason === "refusal") {
         throw new AIProviderError(

@@ -269,6 +269,8 @@ async function processDocument(job: ProcessingJob) {
 
   let status = (doc?.status as DocumentStatus) ?? "queued";
 
+  // Yeniden deneme, tamamlanmış aşamanın durumuyla gelmiş olabilir;
+  // o zaman baştan başlatmadan kaldığı yerden devam edilir.
   if (status === "queued" || status === "failed") {
     await supabase
       .from("documents")
