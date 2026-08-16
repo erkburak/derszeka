@@ -19,7 +19,7 @@ import {
 import { requireProfile } from "@/lib/auth";
 import { createAdminSupabase, createServerSupabase } from "@/lib/supabase/server";
 import { getUsageSummary } from "@/lib/limits";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 export const metadata = { title: "Ayarlar" };
 
@@ -159,15 +159,11 @@ export default async function SettingsPage({
               <div key={item.key}>
                 <div className="mb-1 flex items-center justify-between text-xs">
                   <span className="text-ink-500">{item.label}</span>
-                  <span className="text-ink-700">
-                    {formatNumber(item.used)} / {formatNumber(item.limit)}
-                  </span>
+                  <span className="text-ink-700">{item.display}</span>
                 </div>
                 <Progress
-                  value={item.limit > 0 ? (item.used / item.limit) * 100 : 0}
-                  tone={
-                    item.limit > 0 && item.used / item.limit > 0.85 ? "warning" : "brand"
-                  }
+                  value={item.percent}
+                  tone={item.percent > 85 ? "warning" : "brand"}
                 />
               </div>
             ))}

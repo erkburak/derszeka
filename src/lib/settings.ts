@@ -47,6 +47,13 @@ export const SETTING_DEFAULTS = {
   email_premium_expiry_days: 3,
 
   leaderboard_enabled: true,
+
+  /** Kart ve quiz üretimi ham metin yerine analiz çıktısından beslensin. */
+  generation_from_study_set: true,
+  flashcards_per_document_free: 12,
+  flashcards_per_document_premium: 25,
+  quiz_questions_per_document_free: 6,
+  quiz_questions_per_document_premium: 12,
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

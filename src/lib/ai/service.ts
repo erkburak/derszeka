@@ -28,6 +28,25 @@ let providerCache: {
   instances: Partial<Record<AIProviderName, AIProvider>>;
 } | null = null;
 let modelCache: { at: number; rows: AIModelRow[] } | null = null;
+let routingCache: { at: number; map: Map<AIOperation, string> } | null = null;
+
+/** İşlem → model eşlemesi; her işlem kendi maliyet/kalite dengesiyle çalışır. */
+async function loadRouting(): Promise<Map<AIOperation, string>> {
+  if (routingCache && Date.now() - routingCache.at < PROVIDER_TTL_MS) {
+    return routingCache.map;
+  }
+  const supabase = createAdminSupabase();
+  const { data } = await supabase
+    .from("ai_operation_models")
+    .select("operation, model_id")
+    .not("model_id", "is", null);
+
+  const map = new Map<AIOperation, string>(
+    (data ?? []).map((row) => [row.operation as AIOperation, row.model_id as string]),
+  );
+  routingCache = { at: Date.now(), map };
+  return map;
+}
 
 async function loadModels(): Promise<AIModelRow[]> {
   if (modelCache && Date.now() - modelCache.at < PROVIDER_TTL_MS) {
@@ -110,6 +129,7 @@ async function resolveProvider(name: AIProviderName): Promise<AIProvider> {
 export function invalidateAICache() {
   providerCache = null;
   modelCache = null;
+  routingCache = null;
 }
 
 interface ModelSelection {
@@ -121,19 +141,33 @@ async function selectModel(
   profile: Profile,
   purpose: "chat" | "embedding",
   needs: { vision?: boolean; pdf?: boolean } = {},
+  operation?: AIOperation,
 ): Promise<ModelSelection> {
   const models = await loadModels();
   const advanced = (await getLimit(profile.plan, "feature_advanced_models")) > 0;
 
-  const candidates = models
+  const usable = models
     .filter((m) => m.purpose === purpose)
     .filter((m) => (needs.vision ? m.supports_vision : true))
     .filter((m) => (needs.pdf ? m.supports_pdf : true))
-    .filter((m) => (m.requires_premium ? advanced : true))
+    .filter((m) => (m.requires_premium ? advanced : true));
+
+  // İşleme atanmış model varsa ve kullanıcı ona erişebiliyorsa önce o denenir.
+  let routed: AIModelRow | undefined;
+  if (operation) {
+    const routing = await loadRouting();
+    const routedId = routing.get(operation);
+    if (routedId) routed = usable.find((m) => m.id === routedId);
+  }
+
+  const rest = usable
+    .filter((m) => m.id !== routed?.id)
     .sort((a, b) => {
       if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
       return a.priority - b.priority;
     });
+
+  const candidates = routed ? [routed, ...rest] : rest;
 
   for (const model of candidates) {
     try {
@@ -202,10 +236,16 @@ async function recordRequest(params: {
 
   if (params.profile) {
     const total = params.usage.inputTokens + params.usage.outputTokens;
+    // Maliyet kuruş (sent) olarak sayılır; yuvarlama kaybını önlemek için
+    // yukarı yuvarlanır — tavan böylece asla aşılmaz.
+    const cents = Math.ceil(cost.usd * 100);
+
     await Promise.all([
       incrementUsage(params.profile.id, "ai_requests", "day", 1),
       incrementUsage(params.profile.id, "tokens", "day", total),
       incrementUsage(params.profile.id, "tokens", "month", total),
+      incrementUsage(params.profile.id, "cost_cents", "day", cents),
+      incrementUsage(params.profile.id, "cost_cents", "month", cents),
     ]);
   }
 }
@@ -244,7 +284,16 @@ export async function runChat(options: RunChatOptions): Promise<ChatResponse> {
     await assertWithinLimit(profile, "monthly_tokens", "tokens", "month");
   }
 
-  const { model, provider } = await selectModel(profile, "chat", options.needs);
+  // Maliyet tavanı arka plan işlerinde de geçerli: asıl güvenlik ağı budur.
+  await assertWithinLimit(profile, "daily_cost_cents", "cost_cents", "day");
+  await assertWithinLimit(profile, "monthly_cost_cents", "cost_cents", "month");
+
+  const { model, provider } = await selectModel(
+    profile,
+    "chat",
+    options.needs,
+    options.operation,
+  );
   const planMaxOutput = await getLimit(profile.plan, "max_output_tokens");
   const maxOutputTokens = Math.min(
     options.maxOutputTokens ?? planMaxOutput,

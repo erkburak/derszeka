@@ -15,6 +15,8 @@ export type LimitKey =
   | "monthly_quizzes"
   | "daily_tutor_messages"
   | "max_output_tokens"
+  | "daily_cost_cents"
+  | "monthly_cost_cents"
   | "feature_study_plan"
   | "feature_guided_mode"
   | "feature_spaced_repetition"
@@ -26,7 +28,8 @@ export type UsageMetric =
   | "uploads"
   | "flashcards"
   | "quizzes"
-  | "tutor_messages";
+  | "tutor_messages"
+  | "cost_cents";
 
 /** Limit aşımı — kullanıcıya Premium yükseltme ekranı gösterilir. */
 export class LimitExceededError extends Error {
@@ -132,6 +135,8 @@ const MESSAGES: Record<string, string> = {
   monthly_flashcards: "Bu ayki flashcard üretim hakkın doldu.",
   monthly_quizzes: "Bu ayki quiz üretim hakkın doldu.",
   daily_tutor_messages: "Günlük AI Öğretmen mesaj hakkın doldu.",
+  daily_cost_cents: "Günlük yapay zekâ kullanım bütçen doldu. Yarın sıfırlanacak.",
+  monthly_cost_cents: "Aylık yapay zekâ kullanım bütçen doldu.",
 };
 
 /**
@@ -182,20 +187,53 @@ export async function assertDocumentQuota(profile: Profile): Promise<void> {
 /** Dashboard ve ayarlar sayfasında gösterilen kullanım özeti. */
 export async function getUsageSummary(profile: Profile) {
   const limits = (await getPlanLimits())[profile.plan] ?? {};
-  const [aiRequests, dailyTokens, monthlyTokens, uploads, tutorMessages] =
-    await Promise.all([
-      getUsage(profile.id, "ai_requests", "day"),
-      getUsage(profile.id, "tokens", "day"),
-      getUsage(profile.id, "tokens", "month"),
-      getUsage(profile.id, "uploads", "month"),
-      getUsage(profile.id, "tutor_messages", "day"),
-    ]);
+  const [aiRequests, monthlyCost, uploads, tutorMessages] = await Promise.all([
+    getUsage(profile.id, "ai_requests", "day"),
+    getUsage(profile.id, "cost_cents", "month"),
+    getUsage(profile.id, "uploads", "month"),
+    getUsage(profile.id, "tutor_messages", "day"),
+  ]);
 
-  return [
-    { key: "daily_ai_requests", label: "Günlük AI isteği", used: aiRequests, limit: limits.daily_ai_requests ?? 0 },
-    { key: "daily_tokens", label: "Günlük token", used: dailyTokens, limit: limits.daily_tokens ?? 0 },
-    { key: "monthly_tokens", label: "Aylık token", used: monthlyTokens, limit: limits.monthly_tokens ?? 0 },
-    { key: "monthly_uploads", label: "Aylık yükleme", used: uploads, limit: limits.monthly_uploads ?? 0 },
-    { key: "daily_tutor_messages", label: "Günlük AI Öğretmen mesajı", used: tutorMessages, limit: limits.daily_tutor_messages ?? 0 },
+  const items = [
+    {
+      key: "monthly_cost_cents",
+      label: "Aylık yapay zekâ bütçesi",
+      used: monthlyCost,
+      limit: limits.monthly_cost_cents ?? 0,
+      /** Ham sent değeri kullanıcıya bir şey ifade etmez; yüzde gösterilir. */
+      asPercent: true,
+    },
+    {
+      key: "monthly_uploads",
+      label: "Aylık yükleme",
+      used: uploads,
+      limit: limits.monthly_uploads ?? 0,
+      asPercent: false,
+    },
+    {
+      key: "daily_ai_requests",
+      label: "Günlük AI isteği",
+      used: aiRequests,
+      limit: limits.daily_ai_requests ?? 0,
+      asPercent: false,
+    },
+    {
+      key: "daily_tutor_messages",
+      label: "Günlük AI Öğretmen mesajı",
+      used: tutorMessages,
+      limit: limits.daily_tutor_messages ?? 0,
+      asPercent: false,
+    },
   ];
+
+  return items.map((item) => {
+    const ratio = item.limit > 0 ? item.used / item.limit : 0;
+    return {
+      ...item,
+      percent: Math.min(ratio * 100, 100),
+      display: item.asPercent
+        ? `%${Math.min(Math.round(ratio * 100), 100)} kullanıldı`
+        : `${item.used.toLocaleString("tr-TR")} / ${item.limit.toLocaleString("tr-TR")}`,
+    };
+  });
 }

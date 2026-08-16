@@ -241,6 +241,35 @@ export async function upsertAIModelAction(formData: FormData) {
   revalidatePath("/admin/ai-models");
 }
 
+/** Her AI işlemine hangi modelin bakacağını belirler — maliyetin ana kaldıracı. */
+export async function updateOperationRoutingAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const supabase = createAdminSupabase();
+
+  const changes: Record<string, string | null> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("routing.")) continue;
+    const operation = key.slice("routing.".length);
+    const modelId = String(value) || null;
+
+    await supabase
+      .from("ai_operation_models")
+      .upsert(
+        { operation, model_id: modelId, updated_at: new Date().toISOString() },
+        { onConflict: "operation" },
+      );
+    changes[operation] = modelId;
+  }
+
+  invalidateAICache();
+  await log(admin, "ai_model.updated", {
+    entityType: "ai_operation_models",
+    after: changes,
+  });
+
+  revalidatePath("/admin/ai-models");
+}
+
 export async function deleteAIModelAction(formData: FormData) {
   const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");

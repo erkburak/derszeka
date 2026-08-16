@@ -9,6 +9,7 @@
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "worker": "node scripts/worker.mjs",
+    "verify:schemas": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-schemas.mts",
     "db:login": "npx --yes supabase@latest login",
     "db:link": "npx --yes supabase@latest link --project-ref isonhubfzuivvpmkwjxv",
     "db:push": "npx --yes supabase@latest db push",

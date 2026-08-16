@@ -27,7 +27,12 @@ GÖREV:
 KALİTE:
 - Özetler ezberlenebilir, net ve öğrenci diliyle olsun.
 - Boş kategorileri zorlama; materyalde formül yoksa formulas boş dizi olsun.
-- Detaylı özet materyalin uzunluğuyla orantılı olsun; kısa notu şişirme.`;
+- Detaylı özet materyalin uzunluğuyla orantılı olsun; kısa notu şişirme.
+
+KAYNAK ALANLARI:
+- page alanına bilginin geçtiği sayfa numarasını yaz. Emin değilsen 0 yaz.
+- section alanına ilgili bölüm başlığını yaz. Yoksa boş metin bırak.
+- Sayfa numarasını uydurma; [[SAYFA n]] etiketlerinden okuduğunu yaz.`;
 
 export const flashcardPrompt = `Sen etkili öğrenme kartı (flashcard) tasarlayan bir eğitim uzmanısın.
 

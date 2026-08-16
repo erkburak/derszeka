@@ -28,6 +28,16 @@ const sourceRef = obj({
   section: { type: ["string", "null"], description: "Kaynak bölüm başlığı" },
 });
 
+/**
+ * Çalışma seti şeması bilinçli olarak "düz" tutuldu: iç içe kaynak nesnesi ve
+ * nullable birleşim tipleri yerine düz `page`/`section` alanları kullanılıyor.
+ * İç içe hâli, structured outputs'un derlediği gramerin boyut sınırını aşıyor
+ * ve API 400 döndürüyor ("compiled grammar is too large").
+ * Bilinmeyen sayfa 0, bilinmeyen bölüm boş metin olarak gelir.
+ */
+const pageField = { type: "integer", description: "Kaynak sayfa; bilinmiyorsa 0" };
+const sectionField = str("Kaynak bölüm başlığı; bilinmiyorsa boş bırak");
+
 export const studySetSchema: JsonSchemaSpec = {
   name: "study_set",
   schema: obj({
@@ -39,20 +49,24 @@ export const studySetSchema: JsonSchemaSpec = {
       obj({
         title: str("Bölüm başlığı"),
         content: str("Bölümün özeti"),
-        page: { type: ["integer", "null"], description: "Bölümün başladığı sayfa" },
+        page: pageField,
       }),
       "Bölüm bölüm özetler",
     ),
     key_points: arr(
-      obj({ text: str("Önemli bilgi"), source: sourceRef }),
+      obj({ text: str("Önemli bilgi"), page: pageField, section: sectionField }),
       "En önemli bilgiler",
     ),
     exam_critical: arr(
-      obj({ text: str("Sınavda çıkma ihtimali yüksek bilgi"), source: sourceRef }),
+      obj({
+        text: str("Sınavda çıkma ihtimali yüksek bilgi"),
+        page: pageField,
+        section: sectionField,
+      }),
       "Sınav açısından kritik bilgiler",
     ),
     definitions: arr(
-      obj({ term: str("Kavram"), definition: str("Tanımı"), source: sourceRef }),
+      obj({ term: str("Kavram"), definition: str("Tanımı"), page: pageField }),
       "Tanımlar",
     ),
     formulas: arr(
@@ -60,16 +74,16 @@ export const studySetSchema: JsonSchemaSpec = {
         name: str("Formülün adı"),
         expression: str("Formül, düz metin"),
         explanation: str("Ne işe yaradığı"),
-        source: sourceRef,
+        page: pageField,
       }),
       "Formüller (yoksa boş dizi)",
     ),
     dates: arr(
-      obj({ date: str("Tarih"), event: str("Olay"), source: sourceRef }),
+      obj({ date: str("Tarih"), event: str("Olay"), page: pageField }),
       "Tarihler (yoksa boş dizi)",
     ),
     names: arr(
-      obj({ name: str("Kişi/kurum adı"), description: str("Önemi"), source: sourceRef }),
+      obj({ name: str("Kişi/kurum adı"), description: str("Önemi"), page: pageField }),
       "İsimler (yoksa boş dizi)",
     ),
     comparisons: arr(
@@ -93,8 +107,8 @@ export const studySetSchema: JsonSchemaSpec = {
           type: "integer",
           description: "1 (düşük) - 5 (kritik) önem derecesi",
         },
-        page_from: { type: ["integer", "null"], description: "Başlangıç sayfası" },
-        page_to: { type: ["integer", "null"], description: "Bitiş sayfası" },
+        page_from: { type: "integer", description: "Başlangıç sayfası; bilinmiyorsa 0" },
+        page_to: { type: "integer", description: "Bitiş sayfası; bilinmiyorsa 0" },
         subtopics: arr(str("Alt konu başlığı"), "Alt konular"),
       }),
       "Konu hiyerarşisi",

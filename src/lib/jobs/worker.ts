@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
-import { getLimit } from "@/lib/limits";
+import { getLimit, LimitExceededError } from "@/lib/limits";
 import { extractDocument } from "@/lib/documents/extract";
 import { chunkPages } from "@/lib/documents/chunk";
 import { embedAndStoreChunks } from "@/lib/rag/retrieval";
@@ -192,6 +192,7 @@ async function stageGenerate(profile: Profile, documentId: string) {
 
   const studySetId = (studySet?.id as string) ?? null;
   const isPremium = profile.plan === "premium";
+  const settings = await getSettings();
 
   const { count: cardCount } = await supabase
     .from("flashcards")
@@ -203,7 +204,11 @@ async function stageGenerate(profile: Profile, documentId: string) {
       profile,
       documentId,
       studySetId,
-      count: isPremium ? 30 : 15,
+      count: Number(
+        isPremium
+          ? settings.flashcards_per_document_premium
+          : settings.flashcards_per_document_free,
+      ),
       skipQuota: true,
     });
   }
@@ -218,7 +223,11 @@ async function stageGenerate(profile: Profile, documentId: string) {
       profile,
       documentId,
       studySetId,
-      count: isPremium ? 15 : 8,
+      count: Number(
+        isPremium
+          ? settings.quiz_questions_per_document_premium
+          : settings.quiz_questions_per_document_free,
+      ),
       mode: "mixed",
       skipQuota: true,
     });
@@ -405,9 +414,13 @@ export async function runNextJob(): Promise<{ id: string; type: string } | null>
     // Yapılandırma hatalarını (eksik API anahtarı gibi) tekrar denemek
     // anlamsız; kullanıcıyı bekletmeden net mesajla bitir.
     const aiError = caught instanceof AIProviderError ? caught : null;
-    const retryable = aiError ? aiError.retryable : true;
-    const userMessage =
-      aiError?.code === "auth"
+    const limitError = caught instanceof LimitExceededError ? caught : null;
+
+    // Kota aşımı da tekrar denemeyle çözülmez; kullanıcıya net söylenir.
+    const retryable = limitError ? false : aiError ? aiError.retryable : true;
+    const userMessage = limitError
+      ? `${limitError.message} Bu materyal, kotan yenilendiğinde "Tekrar dene" ile işlenebilir.`
+      : aiError?.code === "auth"
         ? "Yapay zekâ servisi henüz yapılandırılmamış. Yönetici panelinden API anahtarı girilmesi gerekiyor."
         : aiError?.message;
 

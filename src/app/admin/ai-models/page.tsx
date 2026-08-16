@@ -15,10 +15,26 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminSupabase } from "@/lib/supabase/server";
 import {
   deleteAIModelAction,
+  updateOperationRoutingAction,
   updateProviderKeyAction,
   upsertAIModelAction,
 } from "@/app/admin/actions";
 import type { AIModelRow } from "@/lib/types";
+
+/** Maliyeti en çok etkileyen ayar: hangi işlem hangi modelde çalışıyor. */
+const OPERATIONS: { key: string; label: string; hint: string }[] = [
+  { key: "DOCUMENT_ANALYSIS", label: "Materyal analizi", hint: "Kalitenin en kritik olduğu adım" },
+  { key: "OCR", label: "Görsel / taranmış okuma", hint: "Vision destekli model gerekir" },
+  { key: "FLASHCARD_GENERATION", label: "Flashcard üretimi", hint: "Kısa çıktı, ucuz model yeterli" },
+  { key: "QUIZ_GENERATION", label: "Quiz üretimi", hint: "Çeldirici kalitesi için orta seviye" },
+  { key: "ANSWER_EVALUATION", label: "Cevap değerlendirme", hint: "Kısa ve sık; ucuz model" },
+  { key: "AI_TUTOR", label: "AI Öğretmen", hint: "Hız ve maliyet dengesi" },
+  { key: "GUIDED_STUDY", label: "Beni Çalıştır", hint: "Adım adım anlatım" },
+  { key: "STUDY_PLAN", label: "Çalışma planı", hint: "Ayda birkaç kez" },
+  { key: "SUMMARY", label: "Özet", hint: null as unknown as string },
+  { key: "TOPIC_EXTRACTION", label: "Konu çıkarımı", hint: null as unknown as string },
+  { key: "QUESTION_GENERATION", label: "Soru üretimi", hint: null as unknown as string },
+];
 
 export const metadata = { title: "AI Modelleri" };
 export const dynamic = "force-dynamic";
@@ -207,17 +223,26 @@ export default async function AdminAIModelsPage() {
   await requireAdmin();
   const supabase = createAdminSupabase();
 
-  const [{ data: models }, { data: providers }] = await Promise.all([
-    supabase
-      .from("ai_models")
-      .select("*")
-      .order("purpose", { ascending: true })
-      .order("priority", { ascending: true }),
-    supabase
-      .from("ai_providers")
-      .select("provider, display_name, is_enabled, api_key_hint, base_url")
-      .order("provider", { ascending: true }),
-  ]);
+  const [{ data: models }, { data: providers }, { data: routing }] =
+    await Promise.all([
+      supabase
+        .from("ai_models")
+        .select("*")
+        .order("purpose", { ascending: true })
+        .order("priority", { ascending: true }),
+      supabase
+        .from("ai_providers")
+        .select("provider, display_name, is_enabled, api_key_hint, base_url")
+        .order("provider", { ascending: true }),
+      supabase.from("ai_operation_models").select("operation, model_id"),
+    ]);
+
+  const chatModels = ((models ?? []) as AIModelRow[]).filter(
+    (model) => model.purpose === "chat" && model.is_active,
+  );
+  const routingByOperation = new Map(
+    (routing ?? []).map((row) => [row.operation as string, row.model_id as string | null]),
+  );
 
   return (
     <div className="space-y-6">
@@ -293,6 +318,53 @@ export default async function AdminAIModelsPage() {
           </Card>
         ))}
       </div>
+
+      {/* İşlem → model yönlendirmesi */}
+      <Card>
+        <CardHeader>
+          <CardTitle>İşlem bazlı model seçimi</CardTitle>
+          <p className="text-sm text-ink-500">
+            Her işlem farklı bir modelde çalışabilir. Analizi güçlü modelde,
+            kart üretimini ucuz modelde tutmak maliyeti belirgin şekilde düşürür.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form action={updateOperationRoutingAction} className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {OPERATIONS.map((operation) => (
+                <div key={operation.key}>
+                  <Label htmlFor={`routing-${operation.key}`}>
+                    {operation.label}
+                  </Label>
+                  <Select
+                    id={`routing-${operation.key}`}
+                    name={`routing.${operation.key}`}
+                    defaultValue={routingByOperation.get(operation.key) ?? ""}
+                  >
+                    <option value="">Varsayılan model</option>
+                    {chatModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.display_name} — girdi ${model.input_price_per_1m}/M,
+                        çıktı ${model.output_price_per_1m}/M
+                      </option>
+                    ))}
+                  </Select>
+                  {operation.hint ? (
+                    <p className="mt-1 text-xs text-ink-400">{operation.hint}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            <Alert tone="warning">
+              Ücretsiz kullanıcılar &ldquo;Sadece Premium&rdquo; işaretli modelleri
+              kullanamaz; onlar için otomatik olarak bir alt modele düşülür.
+            </Alert>
+
+            <Button type="submit">Yönlendirmeyi kaydet</Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Yeni model */}
       <Card>
