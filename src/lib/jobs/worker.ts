@@ -15,7 +15,22 @@ import { awardBadges } from "@/lib/study/progress";
 import type { DocumentStatus, ProcessingJob, Profile } from "@/lib/types";
 
 const WORKER_ID = `worker-${randomUUID().slice(0, 8)}`;
-const LEASE_SECONDS = 600;
+
+/**
+ * Kilit süresi kısa tutulur ki çöken bir süreç işi uzun süre rehin almasın.
+ * Yaşayan işler `HEARTBEAT_MS` aralığıyla kilidi tazelediği için, uzun süren
+ * bir analiz çalışırken başkası tarafından çalınmaz.
+ */
+const LEASE_SECONDS = 180;
+const HEARTBEAT_MS = 45_000;
+
+async function touchJob(jobId: string) {
+  const supabase = createAdminSupabase();
+  await supabase
+    .from("processing_jobs")
+    .update({ locked_at: new Date().toISOString() })
+    .eq("id", jobId);
+}
 
 /** Kullanıcıya gösterilen aşama metinleri. */
 const STAGE_MESSAGES: Record<DocumentStatus, string> = {
@@ -395,6 +410,12 @@ export async function runNextJob(): Promise<{ id: string; type: string } | null>
   const job = (data as ProcessingJob[] | null)?.[0];
   if (!job) return null;
 
+  // Uzun süren işler kilidi canlı tutar; süreç ölürse kalp atışı durur ve
+  // iş lease dolduğunda otomatik olarak yeniden alınabilir hale gelir.
+  const heartbeat = setInterval(() => {
+    void touchJob(job.id).catch(() => {});
+  }, HEARTBEAT_MS);
+
   try {
     switch (job.job_type) {
       case "document.process":
@@ -434,6 +455,8 @@ export async function runNextJob(): Promise<{ id: string; type: string } | null>
       retryable,
       userMessage,
     });
+  } finally {
+    clearInterval(heartbeat);
   }
 
   return { id: job.id, type: job.job_type };

@@ -22,9 +22,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Progress,
 } from "@/components/ui";
 import { RetryProcessing } from "@/components/app/retry-processing";
+import { DocumentProgress } from "@/components/app/document-progress";
 import { requireProfile } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { renderMarkdown, relativeTime } from "@/lib/utils";
@@ -114,14 +114,11 @@ export default async function MaterialDetailPage({
                 <RetryProcessing documentId={id} />
               </>
             ) : (
-              <>
-                <p className="text-sm text-ink-500">{document.status_message}</p>
-                <Progress value={Number(document.progress)} />
-                <p className="text-xs text-ink-400">
-                  Bu işlem arka planda devam ediyor. Sayfayı kapatabilirsin —
-                  hazır olduğunda bildirim alacaksın.
-                </p>
-              </>
+              <DocumentProgress
+                documentId={id}
+                initialProgress={Number(document.progress)}
+                initialMessage={document.status_message as string | null}
+              />
             )}
           </CardContent>
         </Card>

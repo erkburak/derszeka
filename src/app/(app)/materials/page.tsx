@@ -13,6 +13,7 @@ import { requireProfile } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { getPublicSettings } from "@/lib/settings";
 import { getLimit } from "@/lib/limits";
+import { kickWorker } from "@/lib/jobs/kick";
 import { formatBytes, relativeTime } from "@/lib/utils";
 import type { DocumentStatus } from "@/lib/types";
 
@@ -55,6 +56,15 @@ export default async function MaterialsPage() {
     .order("created_at", { ascending: false });
 
   const rows = documents ?? [];
+
+  // Yarıda kalmış bir iş varsa bu sayfanın açılması onu yeniden başlatır.
+  if (
+    rows.some(
+      (doc) => !["completed", "failed"].includes(doc.status as string),
+    )
+  ) {
+    kickWorker(1);
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
