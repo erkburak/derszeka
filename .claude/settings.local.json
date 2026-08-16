@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Force -Recurse -Depth 2 \"C:\\\\Users\\\\burak\\\\OneDrive\\\\Masaüstü\\\\dersai\" -Exclude node_modules | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object -ExpandProperty FullName)"
+    ]
+  }
+}

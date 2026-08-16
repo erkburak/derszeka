@@ -1,0 +1,223 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   DersAI tasarım sistemi — açık tema.
+   Renkler indigo/mor eksenli; kartlar yumuşak, kenarlıklar ince.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  --color-accent-400: #c084fc;
+  --color-accent-500: #a855f7;
+  --color-accent-600: #9333ea;
+
+  --color-ink-900: #0f172a;
+  --color-ink-700: #334155;
+  --color-ink-500: #64748b;
+  --color-ink-400: #94a3b8;
+
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-surface-sunken: #f1f5f9;
+  --color-line: #e2e8f0;
+
+  --color-success-50: #ecfdf5;
+  --color-success-500: #10b981;
+  --color-success-700: #047857;
+  --color-warning-50: #fffbeb;
+  --color-warning-500: #f59e0b;
+  --color-warning-700: #b45309;
+  --color-danger-50: #fef2f2;
+  --color-danger-500: #ef4444;
+  --color-danger-700: #b91c1c;
+
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --radius-card: 1rem;
+  --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(15 23 42 / 0.05), 0 16px 40px -16px rgb(79 70 229 / 0.28);
+}
+
+/* Ürün açık tema olarak tasarlandı; koyu tema altyapısı token'lar üzerinden
+   ileride devreye alınabilir. Şimdilik tarayıcı tercihini ezip sabit tutuyoruz. */
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--color-brand-100);
+  color: var(--color-brand-900);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* İnce kaydırma çubuğu — uzun listeler ve sohbet için */
+@supports (scrollbar-width: thin) {
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-400) transparent;
+  }
+}
+
+@utility card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+}
+
+@utility gradient-brand {
+  background-image: linear-gradient(
+    135deg,
+    var(--color-brand-600) 0%,
+    var(--color-accent-600) 100%
+  );
+}
+
+@utility gradient-soft {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-brand-50) 0%,
+    transparent 70%
+  );
+}
+
+@utility text-gradient {
+  background-image: linear-gradient(
+    120deg,
+    var(--color-brand-700) 0%,
+    var(--color-accent-600) 60%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -600px 0;
+  }
+  100% {
+    background-position: 600px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-sunken) 25%,
+    #e9eef5 50%,
+    var(--color-surface-sunken) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Markdown içerikleri (özet, AI Öğretmen yanıtları) */
+.prose-study {
+  color: var(--color-ink-700);
+  line-height: 1.7;
+}
+.prose-study h1,
+.prose-study h2,
+.prose-study h3 {
+  color: var(--color-ink-900);
+  font-weight: 650;
+  line-height: 1.3;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+.prose-study h1 { font-size: 1.4rem; }
+.prose-study h2 { font-size: 1.2rem; }
+.prose-study h3 { font-size: 1.05rem; }
+.prose-study p { margin-bottom: 0.9em; }
+.prose-study ul,
+.prose-study ol { margin: 0.75em 0 1em 1.25em; }
+.prose-study ul { list-style: disc; }
+.prose-study ol { list-style: decimal; }
+.prose-study li { margin-bottom: 0.35em; }
+.prose-study strong { color: var(--color-ink-900); font-weight: 620; }
+.prose-study code {
+  background: var(--color-surface-sunken);
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.prose-study table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.925rem;
+}
+.prose-study th,
+.prose-study td {
+  border: 1px solid var(--color-line);
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+}
+.prose-study th {
+  background: var(--color-surface-sunken);
+  font-weight: 600;
+}
+.prose-study blockquote {
+  border-left: 3px solid var(--color-brand-300);
+  padding-left: 0.9rem;
+  color: var(--color-ink-500);
+  margin: 1em 0;
+}
