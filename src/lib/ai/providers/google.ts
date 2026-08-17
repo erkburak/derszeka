@@ -14,6 +14,49 @@ import type {
 /** document_embeddings.embedding kolonunun boyutu. */
 const EMBEDDING_DIMENSIONS = 1536;
 
+/**
+ * Gemini `responseSchema` alanında tam JSON Schema değil, OpenAPI 3.0'ın bir
+ * alt kümesini kabul ediyor: `additionalProperties` gibi anahtarlar isteği
+ * 400 ile reddettiriyor ve tip adları büyük harf enum olarak bekleniyor.
+ * Bu dönüştürücü, uygulamanın tek bir şema tanımıyla çalışmasını sağlıyor.
+ */
+const GEMINI_TYPES: Record<string, string> = {
+  string: "STRING",
+  number: "NUMBER",
+  integer: "INTEGER",
+  boolean: "BOOLEAN",
+  array: "ARRAY",
+  object: "OBJECT",
+};
+
+type SchemaNode = Record<string, unknown>;
+
+function toGeminiSchema(node: SchemaNode): SchemaNode {
+  const rawType = node.type;
+  const types = Array.isArray(rawType) ? rawType : [rawType];
+  const primary = types.find((type) => type !== "null") as string | undefined;
+
+  const result: SchemaNode = {};
+  if (primary) result.type = GEMINI_TYPES[primary] ?? "STRING";
+  if (types.includes("null")) result.nullable = true;
+  if (typeof node.description === "string") result.description = node.description;
+  if (Array.isArray(node.enum)) result.enum = node.enum;
+
+  if (node.properties) {
+    const properties: SchemaNode = {};
+    for (const [key, value] of Object.entries(node.properties as SchemaNode)) {
+      properties[key] = toGeminiSchema(value as SchemaNode);
+    }
+    result.properties = properties;
+    if (Array.isArray(node.required)) result.required = node.required;
+    // Alan sırasını sabitlemek çıktı kararlılığını artırıyor.
+    result.propertyOrdering = Object.keys(properties);
+  }
+
+  if (node.items) result.items = toGeminiSchema(node.items as SchemaNode);
+  return result;
+}
+
 interface GeminiPart {
   text?: string;
   inlineData?: { mimeType: string; data: string };
@@ -79,7 +122,9 @@ export class GoogleProvider implements AIProvider {
         ...(request.jsonSchema
           ? {
               responseMimeType: "application/json",
-              responseSchema: request.jsonSchema.schema,
+              responseSchema: toGeminiSchema(
+                request.jsonSchema.schema as SchemaNode,
+              ),
             }
           : {}),
       },
