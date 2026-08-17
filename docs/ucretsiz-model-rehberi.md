@@ -28,8 +28,38 @@ Aşağıdaki üç yol da gerçek ve bugün uygulanabilir.
 
 ## Yol 1 — Google Gemini ücretsiz katmanı (en kolay)
 
-Sunucu kurmadan, kartsız, gerçekten 0 ₺. Kota sınırları var ama küçük ve
-orta ölçekli bir kullanıcı tabanı için yeterli.
+Sunucu kurmadan, kartsız, gerçekten 0 ₺. **Ama kotalar dar** — aşağıdaki
+tabloyu okumadan üretime çıkma.
+
+### Gerçek kotalar (ölçülen değerler)
+
+`aistudio.google.com/rate-limit` adresinden kendi hesabının kotalarını
+görebilirsin. Ücretsiz katmanda ölçülen değerler:
+
+| Model | İstek/dakika | **İstek/gün** | Kullanım |
+| --- | --- | --- | --- |
+| Gemini 3.7 Flash | 5 | **20** | Yalnızca analiz — kaliteli ama çok dar |
+| Gemini 3.5 / 3.6 Flash | 5 | 20 | Aynı kısıt |
+| **Gemini 3.1 Flash Lite** | **15** | **500** | Birincil model |
+| Gemini Embedding | 100 | 1.000 | Yeterli |
+
+**Bu ne demek?** Bir materyalin tam işlenmesi 3 sohbet isteği harcıyor
+(analiz + flashcard + quiz). Yani günde:
+
+- 3.7 Flash tek başına: **6 materyal**
+- 3.1 Flash Lite ile: **~166 materyal** (tüm kullanıcılar toplamı)
+
+Bu kotalar hesabın tamamı içindir, kullanıcı başına değil. 20 kullanıcın
+varsa hepsi aynı havuzdan yer.
+
+### Projedeki varsayılan dizilim
+
+Bu gerçeğe göre yapılandırıldı:
+
+- **Analiz ve OCR** → Gemini 3.7 Flash (kalite kritik, günde 20 hak)
+- **Diğer tüm işlemler** → Gemini 3.1 Flash Lite (günde 500 hak)
+- 3.7 Flash kotası dolduğunda veya 503 verdiğinde **otomatik olarak**
+  Flash Lite'a düşer — iş başarısız olmaz, sadece biraz kalite kaybeder.
 
 **Kurulum**
 
@@ -44,11 +74,26 @@ orta ölçekli bir kullanıcı tabanı için yeterli.
 - Türkçesi iyi, 1M token bağlam
 - Görsel ve PDF okuyabiliyor (taranmış materyaller çalışır)
 - Şema zorlamalı JSON destekliyor — çıktı kalitesi kararlı
+- Ölçülen hız: 8 sayfalık materyalin analizi ~11 saniye
 
 **Eksileri**
-- Dakikalık ve günlük istek kotası var; kullanıcı sayın büyüyünce yetmez
+- **Günlük kota dar** (yukarıdaki tabloya bak) — 30-50 aktif kullanıcıdan
+  sonra yetmemeye başlar
+- Popüler modeller sık sık 503 "high demand" veriyor (uygulama otomatik
+  olarak yedek modele düşüyor ama gecikme oluyor)
 - Ücretsiz katmanda verilerin model iyileştirmesinde kullanılabilir
   (KVKK metninde bunu belirtmen gerekir)
+
+### Kota dolduğunda ne olur?
+
+Uygulama modeli sırayla dener: birincil model 429/503 verirse otomatik
+olarak sıradaki modele geçer. Hepsi tükenirse kullanıcı
+*"Şu anda yapay zekâ servisinde yoğunluk bulunuyor"* mesajı görür ve iş
+kuyrukta bekler; ertesi gün kota yenilenince **Tekrar dene** ile işlenir.
+
+Kota yetmemeye başladığında iki seçeneğin var: Google'da faturalandırmayı
+açıp ücretli katmana geçmek (kotalar 100 kat artar, maliyet Claude'un
+onda biri) veya kendi sunucuna geçmek.
 
 ---
 

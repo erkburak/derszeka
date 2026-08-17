@@ -144,12 +144,19 @@ interface ModelSelection {
   provider: AIProvider;
 }
 
-async function selectModel(
+/**
+ * Kullanılabilir modelleri öncelik sırasıyla döner.
+ *
+ * Tek model yerine liste dönmesinin sebebi: ücretsiz katmanlarda modeller
+ * sık sık 503 (yoğunluk) veya 429 (kota) veriyor. Böyle bir durumda işi
+ * başarısız saymak yerine sıradaki modelle devam edilir.
+ */
+async function selectModelCandidates(
   profile: Profile,
   purpose: "chat" | "embedding",
   needs: { vision?: boolean; pdf?: boolean } = {},
   operation?: AIOperation,
-): Promise<ModelSelection> {
+): Promise<ModelSelection[]> {
   const models = await loadModels();
   const advanced = (await getLimit(profile.plan, "feature_advanced_models")) > 0;
 
@@ -175,23 +182,28 @@ async function selectModel(
     });
 
   const candidates = routed ? [routed, ...rest] : rest;
+  const resolved: ModelSelection[] = [];
 
   for (const model of candidates) {
     try {
-      return { model, provider: await resolveProvider(model.provider) };
+      resolved.push({ model, provider: await resolveProvider(model.provider) });
     } catch {
-      // Anahtarı olmayan sağlayıcıyı atla, sıradakini dene.
+      // Anahtarı olmayan veya kapalı sağlayıcıyı atla.
     }
   }
 
-  throw new AIProviderError(
-    "Yapay zekâ servisi şu anda kullanılamıyor.",
-    "anthropic",
-    "auth",
-    503,
-    `no usable model for purpose=${purpose} needs=${JSON.stringify(needs)}`,
-    false,
-  );
+  if (resolved.length === 0) {
+    throw new AIProviderError(
+      "Yapay zekâ servisi şu anda kullanılamıyor.",
+      "anthropic",
+      "auth",
+      503,
+      `no usable model for purpose=${purpose} needs=${JSON.stringify(needs)}`,
+      false,
+    );
+  }
+
+  return resolved;
 }
 
 function computeCost(
@@ -295,73 +307,91 @@ export async function runChat(options: RunChatOptions): Promise<ChatResponse> {
   await assertWithinLimit(profile, "daily_cost_cents", "cost_cents", "day");
   await assertWithinLimit(profile, "monthly_cost_cents", "cost_cents", "month");
 
-  const { model, provider } = await selectModel(
+  const candidates = await selectModelCandidates(
     profile,
     "chat",
     options.needs,
     options.operation,
   );
   const planMaxOutput = await getLimit(profile.plan, "max_output_tokens");
-  const maxOutputTokens = Math.min(
-    options.maxOutputTokens ?? planMaxOutput,
-    planMaxOutput,
-    model.max_output_tokens,
-  );
 
-  // Şemayı API seviyesinde zorlayamayan modellerde (açık modellerin çoğu)
-  // sözleşme prompt'a gömülür; yanıt sonra toleranslı biçimde ayrıştırılır.
-  const nativeSchema = Boolean(options.jsonSchema) && model.supports_json_schema;
-  const system =
-    options.jsonSchema && !nativeSchema
-      ? [options.system, buildJsonInstruction(options.jsonSchema)]
-          .filter(Boolean)
-          .join("\n\n")
-      : options.system;
+  let lastError: unknown;
 
-  const startedAt = Date.now();
-  try {
-    const response = await provider.chat(model.model_key, {
-      system,
-      messages: options.messages,
-      maxOutputTokens,
-      jsonSchema: options.jsonSchema,
-      jsonSchemaNative: nativeSchema,
-      // Desteklemeyen modellere effort gönderilmez; API aksi hâlde 400 döner.
-      effort: model.supports_effort
-        ? (settings.ai_effort as "low" | "medium" | "high")
-        : undefined,
-    });
+  for (const [index, { model, provider }] of candidates.entries()) {
+    const maxOutputTokens = Math.min(
+      options.maxOutputTokens ?? planMaxOutput,
+      planMaxOutput,
+      model.max_output_tokens,
+    );
 
-    await recordRequest({
-      profile,
-      model,
-      operation: options.operation,
-      documentId: options.documentId,
-      usage: response.usage,
-      durationMs: Date.now() - startedAt,
-      status: "success",
-      meta: options.meta,
-    });
+    // Şemayı API seviyesinde zorlayamayan modellerde (açık modellerin çoğu)
+    // sözleşme prompt'a gömülür; yanıt sonra toleranslı biçimde ayrıştırılır.
+    const nativeSchema = Boolean(options.jsonSchema) && model.supports_json_schema;
+    const system =
+      options.jsonSchema && !nativeSchema
+        ? [options.system, buildJsonInstruction(options.jsonSchema)]
+            .filter(Boolean)
+            .join("\n\n")
+        : options.system;
 
-    return response;
-  } catch (error) {
-    const aiError = error instanceof AIProviderError ? error : null;
-    await recordRequest({
-      profile,
-      model,
-      operation: options.operation,
-      documentId: options.documentId,
-      usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
-      durationMs: Date.now() - startedAt,
-      status: "error",
-      errorCode: aiError?.code ?? "internal_error",
-      errorMessage:
-        aiError?.technicalMessage ??
-        (error instanceof Error ? error.message : String(error)),
-      meta: options.meta,
-    });
-    throw error;
+    const startedAt = Date.now();
+    try {
+      const response = await provider.chat(model.model_key, {
+        system,
+        messages: options.messages,
+        maxOutputTokens,
+        jsonSchema: options.jsonSchema,
+        jsonSchemaNative: nativeSchema,
+        // Desteklemeyen modellere effort gönderilmez; API aksi hâlde 400 döner.
+        effort: model.supports_effort
+          ? (settings.ai_effort as "low" | "medium" | "high")
+          : undefined,
+      });
+
+      await recordRequest({
+        profile,
+        model,
+        operation: options.operation,
+        documentId: options.documentId,
+        usage: response.usage,
+        durationMs: Date.now() - startedAt,
+        status: "success",
+        meta: { ...options.meta, ...(index > 0 ? { fallbackDepth: index } : {}) },
+      });
+
+      return response;
+    } catch (error) {
+      const aiError = error instanceof AIProviderError ? error : null;
+      await recordRequest({
+        profile,
+        model,
+        operation: options.operation,
+        documentId: options.documentId,
+        usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
+        durationMs: Date.now() - startedAt,
+        status: "error",
+        errorCode: aiError?.code ?? "internal_error",
+        errorMessage:
+          aiError?.technicalMessage ??
+          (error instanceof Error ? error.message : String(error)),
+        meta: options.meta,
+      });
+
+      lastError = error;
+
+      // Yoğunluk veya kota hatasında sıradaki modele geç; şema/yetki
+      // hatalarında geçmenin anlamı yok, aynı sonucu verir.
+      const shouldFallback =
+        aiError?.retryable === true && index < candidates.length - 1;
+      if (!shouldFallback) throw error;
+
+      console.warn(
+        `[ai] ${model.model_key} kullanılamadı (${aiError?.code}); sıradaki model deneniyor.`,
+      );
+    }
   }
+
+  throw lastError;
 }
 
 /** JSON şemalı üretimlerde yanıtı doğrudan tipli nesneye çevirir. */
@@ -389,7 +419,10 @@ export async function runEmbedding(options: {
   documentId?: string | null;
   skipQuota?: boolean;
 }): Promise<number[][]> {
-  const { model, provider } = await selectModel(options.profile, "embedding");
+  const [{ model, provider }] = await selectModelCandidates(
+    options.profile,
+    "embedding",
+  );
   const startedAt = Date.now();
 
   try {
