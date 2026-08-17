@@ -21,7 +21,8 @@ export type QuestionType =
   | "matching"
   | "short_answer"
   | "open_ended";
-export type AIProviderName = "anthropic" | "openai" | "google";
+/** `compatible` = OpenAI-uyumlu her servis: Ollama, Groq, OpenRouter, vLLM... */
+export type AIProviderName = "anthropic" | "openai" | "google" | "compatible";
 export type JobStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
 
 export type AIOperation =
@@ -244,6 +245,8 @@ export interface AIModelRow {
   supports_pdf: boolean;
   /** `output_config.effort` parametresini kabul ediyor mu. */
   supports_effort: boolean;
+  /** Şema zorlamalı JSON çıktısını API seviyesinde destekliyor mu. */
+  supports_json_schema: boolean;
   priority: number;
 }
 

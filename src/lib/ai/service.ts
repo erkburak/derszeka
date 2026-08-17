@@ -3,7 +3,9 @@ import "server-only";
 import { AnthropicProvider } from "@/lib/ai/providers/anthropic";
 import { OpenAIProvider } from "@/lib/ai/providers/openai";
 import { GoogleProvider } from "@/lib/ai/providers/google";
+import { CompatibleProvider } from "@/lib/ai/providers/compatible";
 import { AIProviderError } from "@/lib/ai/errors";
+import { buildJsonInstruction, parseLooseJson } from "@/lib/ai/json";
 import type {
   AIMessage,
   AIProvider,
@@ -101,7 +103,10 @@ async function resolveProvider(name: AIProviderName): Promise<AIProvider> {
       apiKey = undefined;
     }
   }
-  apiKey ??= serverEnv.providerKeys[name];
+  apiKey ??= serverEnv.providerKeys[name as keyof typeof serverEnv.providerKeys];
+
+  // Kendi sunucunda çalışan modeller (Ollama, vLLM) anahtar istemez.
+  if (!apiKey && name === "compatible") apiKey = "local";
 
   if (!apiKey) {
     throw new AIProviderError(
@@ -120,7 +125,9 @@ async function resolveProvider(name: AIProviderName): Promise<AIProvider> {
       ? new AnthropicProvider(apiKey, baseUrl)
       : name === "openai"
         ? new OpenAIProvider(apiKey, baseUrl)
-        : new GoogleProvider(apiKey, baseUrl);
+        : name === "google"
+          ? new GoogleProvider(apiKey, baseUrl)
+          : new CompatibleProvider(apiKey, baseUrl);
 
   providerCache.instances[name] = instance;
   return instance;
@@ -301,13 +308,24 @@ export async function runChat(options: RunChatOptions): Promise<ChatResponse> {
     model.max_output_tokens,
   );
 
+  // Şemayı API seviyesinde zorlayamayan modellerde (açık modellerin çoğu)
+  // sözleşme prompt'a gömülür; yanıt sonra toleranslı biçimde ayrıştırılır.
+  const nativeSchema = Boolean(options.jsonSchema) && model.supports_json_schema;
+  const system =
+    options.jsonSchema && !nativeSchema
+      ? [options.system, buildJsonInstruction(options.jsonSchema)]
+          .filter(Boolean)
+          .join("\n\n")
+      : options.system;
+
   const startedAt = Date.now();
   try {
     const response = await provider.chat(model.model_key, {
-      system: options.system,
+      system,
       messages: options.messages,
       maxOutputTokens,
       jsonSchema: options.jsonSchema,
+      jsonSchemaNative: nativeSchema,
       // Desteklemeyen modellere effort gönderilmez; API aksi hâlde 400 döner.
       effort: model.supports_effort
         ? (settings.ai_effort as "low" | "medium" | "high")
@@ -351,28 +369,18 @@ export async function runStructured<T>(
   options: RunChatOptions & { jsonSchema: JsonSchemaSpec },
 ): Promise<{ data: T; response: ChatResponse }> {
   const response = await runChat(options);
-  const text = response.text.trim();
-  try {
-    return { data: JSON.parse(text) as T, response };
-  } catch {
-    // Bazı modeller JSON'u kod bloğuna sarabiliyor; son çare olarak ayıkla.
-    const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) {
-      try {
-        return { data: JSON.parse(match[0]) as T, response };
-      } catch {
-        /* aşağıdaki hataya düş */
-      }
-    }
-    throw new AIProviderError(
-      "Yapay zekâ yanıtı beklenen biçimde değildi. Lütfen tekrar dene.",
-      "anthropic",
-      "service_error",
-      502,
-      `unparseable model output: ${text.slice(0, 400)}`,
-      true,
-    );
-  }
+  const parsed = parseLooseJson<T>(response.text);
+
+  if (parsed !== null) return { data: parsed, response };
+
+  throw new AIProviderError(
+    "Yapay zekâ yanıtı beklenen biçimde değildi. Lütfen tekrar dene.",
+    "anthropic",
+    "service_error",
+    502,
+    `unparseable model output (${response.modelKey}): ${response.text.slice(0, 400)}`,
+    true,
+  );
 }
 
 export async function runEmbedding(options: {

@@ -22,6 +22,11 @@ export interface ChatRequest {
   maxOutputTokens: number;
   /** Verilirse model yalnızca bu şemaya uyan JSON döndürür. */
   jsonSchema?: JsonSchemaSpec;
+  /**
+   * Şema API seviyesinde zorlanabiliyor mu. False ise şema prompt'a
+   * gömülmüştür ve sağlayıcı yalnızca "JSON döndür" modunu kullanır.
+   */
+  jsonSchemaNative?: boolean;
   /** Düşünme derinliği / maliyet dengesi. */
   effort?: "low" | "medium" | "high";
 }

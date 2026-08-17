@@ -43,7 +43,18 @@ const PROVIDERS = [
   { value: "anthropic", label: "Anthropic (Claude)" },
   { value: "openai", label: "OpenAI" },
   { value: "google", label: "Google Gemini" },
+  { value: "compatible", label: "OpenAI-uyumlu (Ollama / Groq / OpenRouter)" },
 ];
+
+/** Ücretsiz veya kendi sunucunda çalışan seçenekler için hazır ayarlar. */
+const BASE_URL_PRESETS: Record<string, { label: string; url: string }[]> = {
+  compatible: [
+    { label: "Ollama (yerel)", url: "http://localhost:11434/v1" },
+    { label: "Groq (ücretsiz katman)", url: "https://api.groq.com/openai/v1" },
+    { label: "OpenRouter", url: "https://openrouter.ai/api/v1" },
+    { label: "Together AI", url: "https://api.together.xyz/v1" },
+  ],
+};
 
 function Checkbox({
   name,
@@ -210,6 +221,16 @@ function ModelForm({ model }: { model?: AIModelRow }) {
           label="PDF destekler"
           defaultChecked={model?.supports_pdf ?? false}
         />
+        <Checkbox
+          name="supportsEffort"
+          label="effort parametresi"
+          defaultChecked={model?.supports_effort ?? true}
+        />
+        <Checkbox
+          name="supportsJsonSchema"
+          label="Şema zorlamalı JSON"
+          defaultChecked={model?.supports_json_schema ?? true}
+        />
       </div>
 
       <Button type="submit" size="sm">
@@ -294,14 +315,37 @@ export default async function AdminAIModelsPage() {
 
                 <div>
                   <Label htmlFor={`baseUrl-${provider.provider}`}>
-                    Base URL (opsiyonel)
+                    Base URL {provider.provider === "compatible" ? "(gerekli)" : "(opsiyonel)"}
                   </Label>
                   <Input
                     id={`baseUrl-${provider.provider}`}
                     name="baseUrl"
                     defaultValue={provider.base_url ?? ""}
-                    placeholder="Varsayılan"
+                    placeholder={
+                      provider.provider === "compatible"
+                        ? "http://localhost:11434/v1"
+                        : "Varsayılan"
+                    }
+                    list={
+                      BASE_URL_PRESETS[provider.provider]
+                        ? `presets-${provider.provider}`
+                        : undefined
+                    }
                   />
+                  {BASE_URL_PRESETS[provider.provider] ? (
+                    <>
+                      <datalist id={`presets-${provider.provider}`}>
+                        {BASE_URL_PRESETS[provider.provider]!.map((preset) => (
+                          <option key={preset.url} value={preset.url}>
+                            {preset.label}
+                          </option>
+                        ))}
+                      </datalist>
+                      <p className="mt-1 text-xs text-ink-400">
+                        Ollama için anahtar gerekmez, boş bırak.
+                      </p>
+                    </>
+                  ) : null}
                 </div>
 
                 <Checkbox

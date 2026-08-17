@@ -212,6 +212,8 @@ export async function upsertAIModelAction(formData: FormData) {
     max_output_tokens: Number(formData.get("maxOutputTokens")) || 8192,
     supports_vision: formData.get("supportsVision") === "on",
     supports_pdf: formData.get("supportsPdf") === "on",
+    supports_effort: formData.get("supportsEffort") === "on",
+    supports_json_schema: formData.get("supportsJsonSchema") === "on",
     priority: Number(formData.get("priority")) || 100,
   };
 

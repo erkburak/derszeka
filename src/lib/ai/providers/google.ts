@@ -11,6 +11,9 @@ import type {
   ProviderCapabilities,
 } from "@/lib/ai/provider";
 
+/** document_embeddings.embedding kolonunun boyutu. */
+const EMBEDDING_DIMENSIONS = 1536;
+
 interface GeminiPart {
   text?: string;
   inlineData?: { mimeType: string; data: string };
@@ -111,18 +114,35 @@ export class GoogleProvider implements AIProvider {
     modelKey: string,
     request: EmbeddingRequest,
   ): Promise<EmbeddingResponse> {
+    // Veritabanındaki vektör kolonu 1536 boyutlu; Gemini çıktı boyutu
+    // ayarlanabildiği için şemayı değiştirmeden uyum sağlıyoruz.
     const data = await this.request<GeminiResponse>(
       `/models/${modelKey}:batchEmbedContents`,
       {
         requests: request.inputs.map((input) => ({
           model: `models/${modelKey}`,
           content: { parts: [{ text: input }] },
+          outputDimensionality: EMBEDDING_DIMENSIONS,
         })),
       },
     );
 
+    const vectors = (data.embeddings ?? []).map((item) => item.values);
+    for (const vector of vectors) {
+      if (vector.length !== EMBEDDING_DIMENSIONS) {
+        throw new AIProviderError(
+          "Embedding modeli beklenen boyutta vektör döndürmedi.",
+          this.name,
+          "invalid_request",
+          500,
+          `expected ${EMBEDDING_DIMENSIONS} dims, got ${vector.length} from ${modelKey}`,
+          false,
+        );
+      }
+    }
+
     return {
-      vectors: (data.embeddings ?? []).map((item) => item.values),
+      vectors,
       modelKey,
       usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
     };
